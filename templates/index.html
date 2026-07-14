@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>down2listen — Apple Music Downloader</title>
+    <!-- Google Fonts: Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="glass-bg-blobs">
+        <div class="blob blob-pink"></div>
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-blue"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fa-solid fa-headphones"></i>
+                <span>down2listen</span>
+            </div>
+            <p class="subtitle">Extract and convert Spotify, Apple Music, or YouTube tracks/albums to high quality 320kbps MP3 & FLAC</p>
+        </header>
+
+        <main>
+            <!-- Search Section -->
+            <section class="search-section card">
+                <div class="input-group">
+                    <i class="fa-solid fa-link input-icon"></i>
+                    <input type="text" id="music-url" placeholder="Paste Spotify, Apple Music, or YouTube link..." autocomplete="off">
+                    <button id="btn-search" class="btn btn-primary">
+                        <span class="btn-text">Load Details</span>
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+                <p id="search-error" class="error-msg hide"></p>
+            </section>
+
+            <!-- Loading Spinner (Skeleton) -->
+            <div id="loader" class="loader-container hide">
+                <div class="spinner"></div>
+                <p>Retrieving catalog metadata...</p>
+            </div>
+
+            <!-- Preview Section -->
+            <section id="preview-section" class="preview-section hide">
+                <div class="preview-layout">
+                    <div class="artwork-wrapper">
+                        <img id="track-art" src="" alt="Album Cover">
+                        <div class="artwork-overlay"></div>
+                    </div>
+                    
+                    <div class="track-details">
+                        <span id="badge-type" class="badge">Song</span>
+                        <h2 id="track-title">Blinding Lights</h2>
+                        <h3 id="track-artist">The Weeknd</h3>
+                        
+                        <div class="metadata-grid">
+                            <div class="meta-item">
+                                <span class="meta-label">Album</span>
+                                <span id="meta-album" class="meta-value">After Hours</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Release Year</span>
+                                <span id="meta-year" class="meta-value">2020</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Genre</span>
+                                <span id="meta-genre" class="meta-value">R&B/Soul</span>
+                            </div>
+                            <div class="meta-item">
+                                <span class="meta-label">Tracks</span>
+                                <span id="meta-tracks" class="meta-value">1</span>
+                            </div>
+                        </div>
+
+                        <!-- Settings & Action -->
+                        <div class="download-settings">
+                            <div class="select-wrapper">
+                                <label for="download-format">Output Format</label>
+                                <select id="download-format">
+                                    <option value="mp3" selected>(Recommended) MP3 Only (320kbps High Quality)</option>
+                                    <option value="flac">FLAC Only (Lossless Container)</option>
+                                    <option value="both">Both (MP3 + FLAC)</option>
+                                </select>
+                            </div>
+
+                            <div class="select-wrapper">
+                                <label for="cookies-source"><i class="fa-solid fa-cookie-bite"></i> Use Browser Cookies (Fixes YouTube "Sign in" block)</label>
+                                <select id="cookies-source">
+                                    <option value="none">None (Anonymous Search)</option>
+                                    <option value="chrome">Google Chrome</option>
+                                    <option value="edge">Microsoft Edge</option>
+                                    <option value="brave">Brave Browser</option>
+                                    <option value="firefox">Mozilla Firefox</option>
+                                    <option value="opera">Opera</option>
+                                    <option value="safari">Apple Safari</option>
+                                    <option value="vivaldi">Vivaldi</option>
+                                    <option value="whale">Whale Browser</option>
+                                </select>
+                                <p class="help-text"><i class="fa-solid fa-circle-info"></i> <strong>Note:</strong> On Windows, you must close Chromium browsers (Chrome/Brave/Edge/Opera) before starting so the system can read cookies. Firefox does not need to be closed.</p>
+                            </div>
+                            
+                            <button id="btn-download" class="btn btn-download-action">
+                                <i class="fa-solid fa-circle-arrow-down"></i>
+                                <span>Start Downloader</span>
+                            </button>
+                        </div>
+
+                        <!-- Track list preview for albums -->
+                        <div id="album-tracks-container" class="album-tracks-container hide">
+                            <h4>Album Tracklist</h4>
+                            <ul id="album-tracks-list">
+                                <!-- Dynamically populated -->
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Console / Progress Section -->
+            <section id="console-section" class="console-section card hide">
+                <div class="console-header">
+                    <div class="console-title">
+                        <i class="fa-solid fa-terminal"></i>
+                        <span>Downloader Progress Console</span>
+                    </div>
+                    <span id="download-status" class="status-indicator processing">Processing</span>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-container">
+                    <div class="progress-bar-bg">
+                        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text-row">
+                        <span id="progress-text">Preparing download...</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                </div>
+
+                <!-- Log Terminal -->
+                <div id="log-terminal" class="log-terminal">
+                    <!-- Stream logs output here -->
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <div class="quality-warning">
+                <i class="fa-solid fa-circle-info"></i>
+                <span><strong>Quality Notice:</strong> Online music tracks are protected by DRM. This downloader automatically resolves the highest quality matching audio stream on YouTube/YouTube Music (256kbps AAC / 160kbps Opus) and encodes it to high quality MP3 (320kbps) or FLAC containers locally. Artwork and metadata are sourced from their respective official platforms.</span>
+            </div>
+            <p class="copyright">&copy; 2026 down2listen Project. Open-Source. For educational/backup purposes only.</p>
+        </footer>
+    </div>
+
+    <script src="/static/index.js"></script>
+</body>
+</html>
