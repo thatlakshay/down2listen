@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const selectFormat = document.getElementById('download-format');
     const selectCookiesSource = document.getElementById('cookies-source');
+    const checkboxCleanAudio = document.getElementById('clean-audio');
     const btnDownload = document.getElementById('btn-download');
     
     const albumTracksContainer = document.getElementById('album-tracks-container');
@@ -124,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const format = selectFormat.value;
         const cookiesSource = selectCookiesSource ? selectCookiesSource.value : 'none';
+        const cleanAudio = checkboxCleanAudio ? checkboxCleanAudio.checked : true;
         
         // Hide preview card, reveal console card
         previewSection.classList.add('hide');
@@ -140,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         appendLog('info', 'Establishing connection to download server...');
 
-        const sseUrl = `/api/download?url=${encodeURIComponent(currentUrl)}&format=${format}&cookies_from=${cookiesSource}`;
+        const sseUrl = `/api/download?url=${encodeURIComponent(currentUrl)}&format=${format}&cookies_from=${cookiesSource}&clean_audio=${cleanAudio}`;
         eventSource = new EventSource(sseUrl);
 
         let totalTracks = previewData.trackCount || 1;

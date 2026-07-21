@@ -19,8 +19,10 @@ def main():
     parser.add_argument("--format", choices=["mp3", "flac", "both"], default="both", help="Format to download (default: both)")
     parser.add_argument("--output-dir", default="downloads", help="Base download directory (default: downloads)")
     parser.add_argument("--cookies-from", help="Browser to extract cookies from (e.g. chrome, edge, firefox, brave, safari) to bypass bot block")
+    parser.add_argument("--no-clean-audio", action="store_true", help="Disable smart search and download direct links or first search results without video scoring")
     
     args = parser.parse_args()
+    clean_audio = not args.no_clean_audio
     
     # Resolve formats
     formats = ["mp3", "flac"] if args.format == "both" else [args.format]
@@ -49,7 +51,7 @@ def main():
             print(f"Song found: '{title}' by '{artist}'")
             
             # Download directly to output directory
-            download_and_process_track(track_metadata, args.output_dir, formats=formats, cookies_from=args.cookies_from)
+            download_and_process_track(track_metadata, args.output_dir, formats=formats, cookies_from=args.cookies_from, clean_audio=clean_audio)
             print("\nDownload complete!")
             
         elif item_type == "album":
@@ -79,7 +81,7 @@ def main():
                 track_title = track.get("trackName", "Unknown Track")
                 print(f"[{idx+1}/{len(tracks)}] Processing: {track_title}")
                 try:
-                    download_and_process_track(track, album_output_dir, formats=formats, cookies_from=args.cookies_from)
+                    download_and_process_track(track, album_output_dir, formats=formats, cookies_from=args.cookies_from, clean_audio=clean_audio)
                 except Exception as e:
                     print(f"Failed to download '{track_title}': {e}")
                     

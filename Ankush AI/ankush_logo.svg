@@ -1,0 +1,43 @@
+<svg viewBox="0 0 200 100" width="200" height="100" style="overflow: visible;" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow-heavy" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Outer glowing wave (cyan) -->
+  <path d="M 15 58 C 15 78, 42 93, 70 87 C 98 81, 108 36, 122 22 C 130 14, 140 30, 150 48 C 160 66, 170 80, 185 80" 
+        fill="none" stroke="#00e5ff" stroke-width="5" stroke-linecap="round" filter="url(#glow-heavy)" opacity="0.85"/>
+  <!-- Middle wave (white) -->
+  <path d="M 15 58 C 15 78, 42 93, 70 87 C 98 81, 108 36, 122 22 C 130 14, 140 30, 150 48 C 160 66, 170 80, 185 80" 
+        fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+  <!-- Underneath lower wave (cyan) -->
+  <path d="M 70 87 C 85 81, 95 50, 122 48 C 145 46, 155 75, 185 80" 
+        fill="none" stroke="#00e5ff" stroke-width="4" stroke-linecap="round" filter="url(#glow-heavy)" opacity="0.85"/>
+  <!-- Underneath lower wave (white) -->
+  <path d="M 70 87 C 85 81, 95 50, 122 48 C 145 46, 155 75, 185 80" 
+        fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Glowing Dot at peak -->
+  <circle cx="122" cy="22" r="5" fill="#00e5ff" filter="url(#glow-heavy)"/>
+  <circle cx="122" cy="22" r="2.5" fill="#ffffff"/>
+  <!-- Rays/Sparkle from peak -->
+  <line x1="122" y1="12" x2="122" y2="7" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="122" y1="32" x2="122" y2="37" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="112" y1="22" x2="107" y2="22" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="132" y1="22" x2="137" y2="22" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="115" y1="15" x2="111" y2="11" stroke="#00e5ff" stroke-width="1" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="129" y1="29" x2="133" y2="33" stroke="#00e5ff" stroke-width="1" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="115" y1="29" x2="111" y2="33" stroke="#00e5ff" stroke-width="1" stroke-linecap="round" filter="url(#glow-soft)"/>
+  <line x1="129" y1="15" x2="133" y2="11" stroke="#00e5ff" stroke-width="1" stroke-linecap="round" filter="url(#glow-soft)"/>
+</svg>

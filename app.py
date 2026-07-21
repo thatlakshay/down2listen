@@ -91,6 +91,7 @@ def download():
     url = request.args.get('url')
     fmt = request.args.get('format', 'both')
     cookies_from = request.args.get('cookies_from', 'none')
+    clean_audio = request.args.get('clean_audio', 'true').lower() == 'true'
     
     if not url:
         def err_gen():
@@ -120,7 +121,7 @@ def download():
                 def cb(status, msg):
                     q.put({'status': status, 'message': msg})
                     
-                download_and_process_track(track_metadata, DOWNLOADS_DIR, formats=formats, callback=cb, cookies_from=cookies_from)
+                download_and_process_track(track_metadata, DOWNLOADS_DIR, formats=formats, callback=cb, cookies_from=cookies_from, clean_audio=clean_audio)
                 q.put({'status': 'completed', 'message': 'Track downloaded and processed successfully!'})
                 
             elif item_type == 'album':
@@ -156,7 +157,7 @@ def download():
                         q.put({'status': status, 'message': f"[Track {idx+1}/{len(tracks)}] {msg}"})
                         
                     try:
-                        download_and_process_track(track, album_output_dir, formats=formats, callback=cb, cookies_from=cookies_from)
+                        download_and_process_track(track, album_output_dir, formats=formats, callback=cb, cookies_from=cookies_from, clean_audio=clean_audio)
                         q.put({'status': 'track_completed', 'index': idx + 1, 'title': track_title})
                     except Exception as e:
                         q.put({

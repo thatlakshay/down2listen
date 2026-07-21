@@ -129,7 +129,8 @@ def get_apple_page_metadata(url, track_id=None):
             'releaseDate': release_date,
             'primaryGenreName': 'Pop',
             'artworkUrl100': artwork_url,
-            'appleId': str(t_id)
+            'appleId': str(t_id),
+            'duration_ms': item.get('duration')
         })
         
     if track_id:
@@ -242,7 +243,8 @@ def get_spotify_track_metadata(track_id):
         'discCount': 1,
         'releaseDate': release_date,
         'primaryGenreName': 'Pop',
-        'artworkUrl100': artwork_url
+        'artworkUrl100': artwork_url,
+        'duration_ms': entity.get('duration')
     }
 
 def get_spotify_album_metadata(album_id):
@@ -299,7 +301,8 @@ def get_spotify_album_metadata(album_id):
             'releaseDate': release_date,
             'primaryGenreName': 'Pop',
             'artworkUrl100': artwork_url,
-            'spotifyId': t_id
+            'spotifyId': t_id,
+            'duration_ms': t.get('duration')
         })
         
     return {
@@ -308,7 +311,7 @@ def get_spotify_album_metadata(album_id):
     }
 
 def get_youtube_track_metadata(video_id):
-    """Fetch YouTube video metadata using yt-dlp."""
+    """Fetch YouTube video metadata using yt-dlp, and enrich it via iTunes Search API if possible."""
     url = f"https://www.youtube.com/watch?v={video_id}"
     ydl_opts = {
         'quiet': True,
@@ -321,6 +324,12 @@ def get_youtube_track_metadata(video_id):
     artist = info.get('uploader') or info.get('artist') or 'Unknown Artist'
     title = info.get('title') or 'Unknown Title'
     
+    # Strip "- Topic" from artist name if present
+    if artist.lower().endswith(" - topic"):
+        artist = artist[:-8].strip()
+    elif artist.lower().endswith("-topic"):
+        artist = artist[:-6].strip()
+        
     if " - " in title:
         parts = title.split(" - ", 1)
         artist = parts[0].strip()
@@ -328,7 +337,8 @@ def get_youtube_track_metadata(video_id):
         
     title = re.sub(r'\s*[\(\[][^\]\)]*(?:official|video|lyric|audio|clip)[^\]\)]*[\)\]]', '', title, flags=re.I).strip()
     
-    return {
+    # Base metadata
+    metadata = {
         'trackName': title,
         'artistName': artist,
         'collectionName': 'YouTube Download',
@@ -339,8 +349,46 @@ def get_youtube_track_metadata(video_id):
         'releaseDate': info.get('upload_date', '')[:4] if info.get('upload_date') else '',
         'primaryGenreName': 'Other',
         'artworkUrl100': info.get('thumbnail', ''),
-        'youtubeId': video_id
+        'youtubeId': video_id,
+        'duration_ms': (info.get('duration') or 0) * 1000,
+        'actual_duration_ms': (info.get('duration') or 0) * 1000
     }
+    
+    # Attempt to enrich via iTunes Search API
+    try:
+        search_url = "https://itunes.apple.com/search"
+        search_term = f"{artist} {title}"
+        params = {"term": search_term, "entity": "song", "limit": 1}
+        headers = {"User-Agent": "Mozilla/5.0"}
+        r = requests.get(search_url, params=params, headers=headers, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("resultCount", 0) > 0:
+                result = data["results"][0]
+                
+                # Check for matching confidence
+                def clean_str(s):
+                    return re.sub(r'[^a-zA-Z0-9]', '', s).lower()
+                
+                itunes_t = clean_str(result.get('trackName', ''))
+                itunes_a = clean_str(result.get('artistName', ''))
+                parsed_t = clean_str(title)
+                parsed_a = clean_str(artist)
+                
+                # If titles overlap, we consider it a confidence match
+                if itunes_t in parsed_t or parsed_t in itunes_t:
+                    metadata['trackName'] = result.get('trackName', title)
+                    metadata['artistName'] = result.get('artistName', artist)
+                    metadata['collectionName'] = result.get('collectionName', 'YouTube Download')
+                    metadata['releaseDate'] = result.get('releaseDate', metadata['releaseDate'])
+                    metadata['primaryGenreName'] = result.get('primaryGenreName', 'Other')
+                    if result.get('artworkUrl100'):
+                        metadata['artworkUrl100'] = result['artworkUrl100']
+                    metadata['duration_ms'] = result.get('trackTimeMillis', metadata['duration_ms'])
+    except Exception:
+        pass # Silently proceed with YouTube metadata if iTunes search fails
+        
+    return metadata
 
 def get_youtube_playlist_metadata(playlist_id):
     """Fetch YouTube playlist metadata using yt-dlp."""
@@ -388,7 +436,8 @@ def get_youtube_playlist_metadata(playlist_id):
             'releaseDate': '',
             'primaryGenreName': 'Other',
             'artworkUrl100': entry.get('thumbnail', album_info['artworkUrl100']),
-            'youtubeId': entry.get('id')
+            'youtubeId': entry.get('id'),
+            'duration_ms': (entry.get('duration') or 0) * 1000
         })
         
     return {
@@ -515,9 +564,66 @@ def tag_flac(file_path, metadata, artwork_bytes):
         
     audio.save()
 
-def download_and_process_track(track_metadata, download_dir, formats=['mp3', 'flac'], callback=None, cookies_from=None):
+def score_video_match(title, channel, duration, artist, track_name, target_duration=None):
     """
-    Search YouTube Music, download the track, convert it, and tag it.
+    Score a YouTube search result based on how likely it is to be the clean, official audio track.
+    Higher score is better.
+    """
+    score = 0
+    title_lower = title.lower()
+    channel_lower = (channel or "").lower()
+    artist_lower = artist.lower()
+    
+    # 1. Channel / Uploader check
+    is_topic = "topic" in channel_lower
+    if is_topic:
+        score += 100
+        
+    # 2. Title keywords
+    # Clean track indicators
+    if "official audio" in title_lower:
+        score += 30
+    elif "audio" in title_lower:
+        score += 15
+    if "lyrics" in title_lower or "lyric" in title_lower:
+        score += 10
+    if "visualizer" in title_lower:
+        score += 10
+        
+    # Video indicators (penalize music videos with potential extra parts)
+    if "music video" in title_lower or "official music video" in title_lower:
+        score -= 50
+    elif "official video" in title_lower or "official 4k video" in title_lower:
+        score -= 40
+    elif "video" in title_lower:
+        if "lyric" not in title_lower:
+            score -= 20
+    if "short film" in title_lower or "cinematic" in title_lower:
+        score -= 60
+        
+    # 3. Duration match (if target duration is available)
+    if target_duration and duration:
+        diff = abs(duration - target_duration)
+        if diff <= 3:
+            score += 150 # Perfect duration match
+        elif diff <= 8:
+            score += 80  # Close match
+        elif diff <= 15:
+            score += 40  # Tolerable match
+        elif diff > 40:
+            score -= 100 # Massive difference (likely music video with intro/outro)
+        elif diff > 20:
+            score -= 40
+            
+    # 4. Artist name matching in channel
+    if artist_lower in channel_lower:
+        score += 10
+        
+    return score
+
+def download_and_process_track(track_metadata, download_dir, formats=['mp3', 'flac'], callback=None, cookies_from=None, clean_audio=True):
+    """
+    Search YouTube, download the track, convert it, and tag it.
     callback(status, message) can be passed to report real-time updates.
     """
     def log(status, message):
@@ -532,12 +638,129 @@ def download_and_process_track(track_metadata, download_dir, formats=['mp3', 'fl
     track_num = track_metadata.get('trackNumber', 1)
     
     yt_id = track_metadata.get('youtubeId')
-    if yt_id:
+    duration_ms = track_metadata.get('duration_ms') or track_metadata.get('trackTimeMillis')
+    target_duration = float(duration_ms) / 1000.0 if duration_ms else None
+    actual_duration = float(track_metadata.get('actual_duration_ms') or duration_ms) / 1000.0 if duration_ms else None
+    
+    video_id = None
+    
+    # 1. Resolve video_id
+    if yt_id and not clean_audio:
         log('searching', f"Resolving direct YouTube link (ID: {yt_id})")
-        search_query = f"https://www.youtube.com/watch?v={yt_id}"
+        video_id = yt_id
     else:
-        log('searching', f"Searching YouTube Music for '{artist} - {title}'")
-        search_query = f"ytsearch1:{artist} - {title} (Official Audio)"
+        # Evaluate direct video if it exists and clean_audio is True
+        direct_clean = False
+        direct_duration = None
+        if yt_id:
+            direct_title = track_metadata.get('trackName', '')
+            direct_channel = track_metadata.get('artistName', '')
+            direct_duration = actual_duration
+            
+            # Evaluate direct video score against target duration
+            direct_score = score_video_match(direct_title, direct_channel, actual_duration, artist, title, target_duration)
+            
+            # If it's already clean, we can use it directly
+            if "topic" in direct_channel.lower() or "official audio" in direct_title.lower() or direct_score >= 80:
+                log('searching', f"Direct link (ID: {yt_id}) is already clean audio. Using it.")
+                video_id = yt_id
+                direct_clean = True
+        
+        if not video_id:
+            # Run query search
+            log('searching', f"Searching YouTube for cleanest audio of '{artist} - {title}'")
+            search_query_term = f"{artist} - {title} (Official Audio)"
+            search_query = f"ytsearch5:{search_query_term}"
+            
+            def get_search_results(query, use_cookies=True):
+                opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': 'in_playlist',
+                    'nocheckcertificate': True,
+                }
+                if use_cookies and cookies_from and cookies_from != 'none':
+                    opts['cookiesfrombrowser'] = (cookies_from, None, None, None)
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    return ydl.extract_info(query, download=False)
+            
+            info_search = None
+            try:
+                info_search = get_search_results(search_query, use_cookies=True)
+            except Exception as e:
+                err_msg = str(e)
+                cookie_error = cookies_from and cookies_from != 'none' and (
+                    "cookie" in err_msg.lower() or 
+                    "lock" in err_msg.lower() or 
+                    "permission" in err_msg.lower() or 
+                    "database" in err_msg.lower() or 
+                    "7271" in err_msg.lower()
+                )
+                if cookie_error:
+                    log('warning', f"Could not read {cookies_from} cookies during search. Retrying search anonymously...")
+                    try:
+                        info_search = get_search_results(search_query, use_cookies=False)
+                    except Exception as e_anon:
+                        log('searching', "Primary search failed. Retrying fallback search anonymously...")
+                        search_fallback = f"ytsearch5:{artist} - {title}"
+                        info_search = get_search_results(search_fallback, use_cookies=False)
+                else:
+                    log('searching', "Primary search failed. Retrying fallback search...")
+                    search_fallback = f"ytsearch5:{artist} - {title}"
+                    try:
+                        info_search = get_search_results(search_fallback, use_cookies=True)
+                    except Exception:
+                        info_search = get_search_results(search_fallback, use_cookies=False)
+            
+            entries = info_search.get('entries', []) if info_search else []
+            if entries:
+                scored_entries = []
+                for entry in entries:
+                    e_title = entry.get('title', 'Unknown')
+                    e_channel = entry.get('channel') or entry.get('uploader') or 'Unknown'
+                    e_duration = entry.get('duration')
+                    e_id = entry.get('id')
+                    
+                    # For direct YouTube links, pass target_duration only if we successfully enriched it
+                    # (meaning it is different from the actual direct video's duration by a significant margin).
+                    has_enriched_duration = (yt_id and target_duration and actual_duration and abs(target_duration - actual_duration) > 5)
+                    pass_target_duration = target_duration if (not yt_id or has_enriched_duration) else None
+                    
+                    e_score = score_video_match(e_title, e_channel, e_duration, artist, title, pass_target_duration)
+                    scored_entries.append((e_score, e_duration, e_id, e_title))
+                
+                # Sort by score descending
+                scored_entries.sort(key=lambda x: x[0], reverse=True)
+                best_score, best_dur, best_id, best_title = scored_entries[0]
+                
+                if yt_id:
+                    # If we had a direct link, only replace it if we found a strong topic/clean candidate
+                    # and the best matched video is shorter (since music videos have extra non-music parts)
+                    if best_score >= 80 and (direct_duration is None or best_dur < direct_duration - 15):
+                        log('searching', f"Found cleaner audio version: '{best_title}' (ID: {best_id}). Replacing direct video link.")
+                        video_id = best_id
+                    else:
+                        log('searching', f"Using user-provided direct YouTube link (ID: {yt_id})")
+                        video_id = yt_id
+                else:
+                    log('searching', f"Selected cleanest audio track: '{best_title}' (ID: {best_id})")
+                    video_id = best_id
+            else:
+                if yt_id:
+                    log('searching', f"No search candidates found. Using direct YouTube link (ID: {yt_id})")
+                    video_id = yt_id
+                else:
+                    raise ValueError("No matching audio stream found on YouTube.")
+                    
+    # Ultimate fallback just in case
+    if not video_id:
+        if yt_id:
+            video_id = yt_id
+        else:
+            raise ValueError("Could not find any matching video on YouTube.")
+            
+    # Set final direct search query for downloading
+    search_query = f"https://www.youtube.com/watch?v={video_id}"
     
     # Create temp directory for downloading the raw stream
     temp_dir = tempfile.mkdtemp()
@@ -571,38 +794,14 @@ def download_and_process_track(track_metadata, download_dir, formats=['mp3', 'fl
                 "7271" in err_msg.lower()
             )
             if cookie_error:
-                log('warning', f"Could not read {cookies_from} cookies (browser is likely running). Retrying search anonymously...")
-                try:
-                    info = try_download(search_query, use_cookies=False)
-                except Exception as e_anon:
-                    if yt_id:
-                        raise e_anon
-                    log('searching', "Primary search failed. Retrying fallback search anonymously...")
-                    search_query_fallback = f"ytsearch1:{artist} - {title}"
-                    info = try_download(search_query_fallback, use_cookies=False)
+                log('warning', f"Could not read {cookies_from} cookies (browser is likely running). Retrying download anonymously...")
+                info = try_download(search_query, use_cookies=False)
             else:
-                if yt_id:
-                    log('warning', "Direct video download failed. Retrying anonymously...")
-                    info = try_download(search_query, use_cookies=False)
-                else:
-                    log('searching', f"Retrying search for '{artist} - {title}' with fallback query")
-                    search_query_fallback = f"ytsearch1:{artist} - {title}"
-                    try:
-                        info = try_download(search_query_fallback, use_cookies=True)
-                    except Exception as e_fallback:
-                        log('warning', "Fallback query failed. Retrying fallback search anonymously...")
-                        info = try_download(search_query_fallback, use_cookies=False)
+                log('warning', "Direct video download failed. Retrying anonymously...")
+                info = try_download(search_query, use_cookies=False)
                 
         if not info:
             raise ValueError("No matching audio stream found on YouTube.")
-            
-        if 'entries' in info:
-            if len(info['entries']) == 0:
-                raise ValueError("No matching audio stream found on YouTube.")
-            entry = info['entries'][0]
-            video_id = entry['id']
-        else:
-            video_id = info['id']
             
         log('downloading', f"Downloading audio stream from YouTube (ID: {video_id})")
             
