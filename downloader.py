@@ -107,12 +107,20 @@ def get_apple_page_metadata(url, track_id=None):
     tracks_list = []
     for section in sections:
         items = section.get("items", [])
-        if items and isinstance(items, list) and "trackNumber" in items[0]:
-            tracks_list = items
-            break
+        if items and isinstance(items, list):
+            if any("trackNumber" in item for item in items):
+                for item in items:
+                    if "trackNumber" in item:
+                        tracks_list.append(item)
             
     if not tracks_list:
         raise ValueError("Could not find tracklist in Apple Music page metadata.")
+        
+    disc_count = 1
+    for item in tracks_list:
+        d_num = item.get("discNumber", 1)
+        if isinstance(d_num, int) and d_num > disc_count:
+            disc_count = d_num
         
     mapped_tracks = []
     for idx, item in enumerate(tracks_list):
@@ -121,11 +129,12 @@ def get_apple_page_metadata(url, track_id=None):
         mapped_tracks.append({
             'trackName': item.get('title', 'Unknown Track'),
             'artistName': item.get('artistName', album_artist),
+            'albumArtist': album_artist,
             'collectionName': album_name,
             'trackNumber': item.get('trackNumber', idx + 1),
             'trackCount': len(tracks_list),
             'discNumber': item.get('discNumber', 1),
-            'discCount': 1,
+            'discCount': disc_count,
             'releaseDate': release_date,
             'primaryGenreName': 'Pop',
             'artworkUrl100': artwork_url,
@@ -171,6 +180,7 @@ def get_track_metadata(url_or_id, track_id=None):
         result = data["results"][0]
         if result.get("wrapperType") != "track" and result.get("kind") != "song":
             raise ValueError(f"ID {url_or_id} does not represent a song.")
+        result["albumArtist"] = result.get("collectionArtistName") or result.get("artistName")
         return result
 
 def get_album_metadata(url_or_id):
@@ -190,6 +200,9 @@ def get_album_metadata(url_or_id):
         if album_info.get("wrapperType") != "collection":
             raise ValueError(f"ID {url_or_id} does not represent an album/collection.")
         tracks = results[1:]
+        album_artist = album_info.get("artistName")
+        for track in tracks:
+            track["albumArtist"] = track.get("collectionArtistName") or album_artist
         tracks.sort(key=lambda t: (t.get("discNumber", 1), t.get("trackNumber", 1)))
         return {
             "album_info": album_info,
@@ -236,6 +249,7 @@ def get_spotify_track_metadata(track_id):
     return {
         'trackName': entity.get('name', 'Unknown Track'),
         'artistName': artist_name,
+        'albumArtist': artist_name,
         'collectionName': album_name,
         'trackNumber': entity.get('trackNumber', 1),
         'trackCount': 1,
@@ -293,6 +307,7 @@ def get_spotify_album_metadata(album_id):
         tracks.append({
             'trackName': t.get('title', 'Unknown Track'),
             'artistName': t.get('subtitle', artist_name),
+            'albumArtist': artist_name,
             'collectionName': album_name,
             'trackNumber': idx + 1,
             'trackCount': len(track_list_raw),
@@ -341,6 +356,7 @@ def get_youtube_track_metadata(video_id):
     metadata = {
         'trackName': title,
         'artistName': artist,
+        'albumArtist': artist,
         'collectionName': 'YouTube Download',
         'trackNumber': 1,
         'trackCount': 1,
@@ -379,6 +395,7 @@ def get_youtube_track_metadata(video_id):
                 if itunes_t in parsed_t or parsed_t in itunes_t:
                     metadata['trackName'] = result.get('trackName', title)
                     metadata['artistName'] = result.get('artistName', artist)
+                    metadata['albumArtist'] = result.get('collectionArtistName') or result.get('artistName', artist)
                     metadata['collectionName'] = result.get('collectionName', 'YouTube Download')
                     metadata['releaseDate'] = result.get('releaseDate', metadata['releaseDate'])
                     metadata['primaryGenreName'] = result.get('primaryGenreName', 'Other')
@@ -428,6 +445,7 @@ def get_youtube_playlist_metadata(playlist_id):
         tracks.append({
             'trackName': title,
             'artistName': artist,
+            'albumArtist': uploader,
             'collectionName': playlist_title,
             'trackNumber': idx + 1,
             'trackCount': len(entries),
@@ -494,6 +512,7 @@ def tag_mp3(file_path, metadata, artwork_bytes):
     audio['title'] = metadata.get('trackName', '')
     audio['artist'] = metadata.get('artistName', '')
     audio['album'] = metadata.get('collectionName', '')
+    audio['albumartist'] = metadata.get('albumArtist') or metadata.get('artistName', '')
     
     if 'trackNumber' in metadata:
         if 'trackCount' in metadata:
@@ -534,6 +553,9 @@ def tag_flac(file_path, metadata, artwork_bytes):
     audio['title'] = metadata.get('trackName', '')
     audio['artist'] = metadata.get('artistName', '')
     audio['album'] = metadata.get('collectionName', '')
+    album_artist = metadata.get('albumArtist') or metadata.get('artistName', '')
+    audio['albumartist'] = album_artist
+    audio['album_artist'] = album_artist
     
     if 'trackNumber' in metadata:
         audio['tracknumber'] = str(metadata['trackNumber'])
@@ -564,23 +586,70 @@ def tag_flac(file_path, metadata, artwork_bytes):
         
     audio.save()
 
+def clean_name(name):
+    """Clean name by removing featured artists, punctuation, and tokenizing."""
+    name = re.sub(r'\(feat\..*?\)', '', name, flags=re.I)
+    name = re.sub(r'feat\..*', '', name, flags=re.I)
+    name = re.sub(r'[^\w\s]', '', name)
+    return [w.lower() for w in name.split() if w.strip()]
+
 def score_video_match(title, channel, duration, artist, track_name, target_duration=None):
     """
     Score a YouTube search result based on how likely it is to be the clean, official audio track.
-    Higher score is better.
+    Higher score is better. Rejects mismatches or bad content types (covers, reactions, etc.) with -9999.
     """
     score = 0
     title_lower = title.lower()
     channel_lower = (channel or "").lower()
-    artist_lower = artist.lower()
     
-    # 1. Channel / Uploader check
+    # 1. STRICT REJECTION OF WRONG VIDEO TYPES (reaction, cover, live, remix, parody, etc.)
+    bad_words = ['reaction', 'react', 'reacts', 'cover', 'remix', 'live', 'mashup', 'slowed', 'reverb', 'karaoke', 'instrumental', 'tutorial', 'acoustic', 'tribute', 'parody', 'chopped', 'screwed']
+    for word in bad_words:
+        if word in title_lower and word not in track_name.lower() and word not in artist.lower():
+            return -9999
+            
+    # Reject if channel name indicates reaction/cover/karaoke/instrumental
+    bad_channel_words = ['reaction', 'reacts', 'cover', 'karaoke', 'instrumental', 'tutorial']
+    for word in bad_channel_words:
+        if word in channel_lower and word not in artist.lower() and word not in track_name.lower():
+            return -9999
+            
+    # Noise words to ignore when doing strict matching on titles
+    noise_words = {'intro', 'outro', 'interlude', 'feat', 'ft', 'remix', 'prod', 'version', 'deluxe', 'pt', 'part', 'official', 'audio', 'video', 'lyric', 'lyrics', 'visualizer'}
+    
+    # 2. Title Match Check (CRITICAL)
+    track_words = clean_name(track_name)
+    meaningful_track_words = [w for w in track_words if w not in noise_words]
+    if not meaningful_track_words:
+        meaningful_track_words = track_words if track_words else [track_name.lower()]
+        
+    matched_words = sum(1 for w in meaningful_track_words if w in title_lower)
+    match_ratio = matched_words / len(meaningful_track_words) if meaningful_track_words else 0
+    
+    if match_ratio == 0:
+        # Reject completely if no core words match the title
+        return -9999
+        
+    score += int(match_ratio * 150)
+    
+    # 3. Artist Match Check
+    artist_words = clean_name(artist)
+    meaningful_artist_words = [w for w in artist_words if w not in noise_words]
+    if not meaningful_artist_words:
+        meaningful_artist_words = artist_words if artist_words else [artist.lower()]
+        
+    artist_matched = any(w in channel_lower or w in title_lower for w in meaningful_artist_words)
+    if artist_matched:
+        score += 50
+    else:
+        score -= 50
+        
+    # 4. Channel / Uploader check
     is_topic = "topic" in channel_lower
     if is_topic:
         score += 100
         
-    # 2. Title keywords
-    # Clean track indicators
+    # 5. Title keywords
     if "official audio" in title_lower:
         score += 30
     elif "audio" in title_lower:
@@ -601,7 +670,7 @@ def score_video_match(title, channel, duration, artist, track_name, target_durat
     if "short film" in title_lower or "cinematic" in title_lower:
         score -= 60
         
-    # 3. Duration match (if target duration is available)
+    # 5. Duration match (if target duration is available)
     if target_duration and duration:
         diff = abs(duration - target_duration)
         if diff <= 3:
@@ -615,10 +684,6 @@ def score_video_match(title, channel, duration, artist, track_name, target_durat
         elif diff > 20:
             score -= 40
             
-    # 4. Artist name matching in channel
-    if artist_lower in channel_lower:
-        score += 10
-        
     return score
 
 def download_and_process_track(track_metadata, download_dir, formats=['mp3', 'flac'], callback=None, cookies_from=None, clean_audio=True):
@@ -669,7 +734,7 @@ def download_and_process_track(track_metadata, download_dir, formats=['mp3', 'fl
         if not video_id:
             # Run query search
             log('searching', f"Searching YouTube for cleanest audio of '{artist} - {title}'")
-            search_query_term = f"{artist} - {title} (Official Audio)"
+            search_query_term = f"{artist} - {title}"
             search_query = f"ytsearch5:{search_query_term}"
             
             def get_search_results(query, use_cookies=True):
