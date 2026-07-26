@@ -605,14 +605,20 @@ def score_video_match(title, channel, duration, artist, track_name, target_durat
     # 1. STRICT REJECTION OF WRONG VIDEO TYPES (reaction, cover, live, remix, parody, etc.)
     bad_words = ['reaction', 'react', 'reacts', 'cover', 'remix', 'live', 'mashup', 'slowed', 'reverb', 'karaoke', 'instrumental', 'tutorial', 'acoustic', 'tribute', 'parody', 'chopped', 'screwed']
     for word in bad_words:
-        if word in title_lower and word not in track_name.lower() and word not in artist.lower():
-            return -9999
+        if re.search(rf"\b{word}\b", title_lower):
+            in_track = re.search(rf"\b{word}\b", track_name.lower()) is not None
+            in_artist = re.search(rf"\b{word}\b", artist.lower()) is not None
+            if not in_track and not in_artist:
+                return -9999
             
     # Reject if channel name indicates reaction/cover/karaoke/instrumental
     bad_channel_words = ['reaction', 'reacts', 'cover', 'karaoke', 'instrumental', 'tutorial']
     for word in bad_channel_words:
-        if word in channel_lower and word not in artist.lower() and word not in track_name.lower():
-            return -9999
+        if re.search(rf"\b{word}\b", channel_lower):
+            in_track = re.search(rf"\b{word}\b", track_name.lower()) is not None
+            in_artist = re.search(rf"\b{word}\b", artist.lower()) is not None
+            if not in_track and not in_artist:
+                return -9999
             
     # Noise words to ignore when doing strict matching on titles
     noise_words = {'intro', 'outro', 'interlude', 'feat', 'ft', 'remix', 'prod', 'version', 'deluxe', 'pt', 'part', 'official', 'audio', 'video', 'lyric', 'lyrics', 'visualizer'}
