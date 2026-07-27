@@ -1,173 +1,404 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>down2listen — Apple Music Downloader</title>
-    <!-- Google Fonts: Outfit -->
+    <title>down2listen — Music Downloader</title>
+    <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+    
+    <!-- Google Fonts: Inter & Geist Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- FontAwesome for Premium Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="glass-bg-blobs">
-        <div class="blob blob-pink"></div>
-        <div class="blob blob-purple"></div>
-        <div class="blob blob-blue"></div>
+    <!-- Ambient Aurora Layer (<12% Opacity) -->
+    <div class="aurora-backdrop">
+        <div class="aurora-glow aurora-purple"></div>
+        <div class="aurora-glow aurora-indigo"></div>
+        <div class="aurora-glow aurora-blue"></div>
     </div>
 
-    <div class="container">
-        <header>
-            <div class="logo">
-                <i class="fa-solid fa-headphones"></i>
-                <span>down2listen</span>
+    <!-- Desktop App Container -->
+    <div class="app-window">
+
+        <!-- 1. Arc-Inspired Floating Top Navigation -->
+        <header class="top-nav-glass">
+            <div class="nav-brand">
+                <img src="/static/logo.svg" alt="down2listen logo" class="brand-logo-img">
+                <span class="brand-name">down2listen</span>
             </div>
-            <p class="subtitle">Extract and convert Spotify, Apple Music, or YouTube tracks/albums to high quality 320kbps MP3 & FLAC</p>
+
+            <nav class="nav-links">
+                <button class="nav-tab active" data-tab="workspace">
+                    <i data-lucide="layout-grid"></i>
+                    <span>Downloads</span>
+                </button>
+                <button class="nav-tab" data-tab="history" id="nav-btn-history">
+                    <i data-lucide="history"></i>
+                    <span>History</span>
+                    <span class="tab-pill-count hide" id="history-count">0</span>
+                </button>
+                <button class="nav-tab" data-tab="settings" id="nav-btn-settings">
+                    <i data-lucide="sliders"></i>
+                    <span>Settings</span>
+                </button>
+            </nav>
+
+            <div class="nav-actions">
+                <button class="icon-btn-glass" id="btn-theme-toggle" title="Toggle Light / Dark Mode">
+                    <i data-lucide="sun" id="theme-toggle-icon"></i>
+                </button>
+            </div>
         </header>
 
-        <main>
-            <!-- Search Section -->
-            <section class="search-section card">
-                <div class="input-group">
-                    <i class="fa-solid fa-link input-icon"></i>
-                    <input type="text" id="music-url" placeholder="Paste Spotify, Apple Music, or YouTube link..." autocomplete="off">
-                    <button id="btn-search" class="btn btn-primary">
-                        <span class="btn-text">Load Details</span>
-                        <i class="fa-solid fa-arrow-right"></i>
+        <!-- 2. URL Input Bar -->
+        <section class="url-input-section">
+            <div class="glass-input-wrapper">
+                <div class="input-icon-box">
+                    <i data-lucide="link-2"></i>
+                </div>
+
+                <input type="text" 
+                       id="music-url" 
+                       placeholder="Paste Spotify, Apple Music, or YouTube album/track URL..." 
+                       autocomplete="off"
+                       spellcheck="false">
+
+                <div class="input-action-cluster">
+                    <button id="btn-search" class="btn-primary-purple">
+                        <span class="btn-text">Resolve URL</span>
+                        <i data-lucide="arrow-right"></i>
                     </button>
                 </div>
-                <p id="search-error" class="error-msg hide"></p>
+            </div>
+            
+            <div id="search-error" class="glass-alert-error hide">
+                <i data-lucide="alert-circle"></i>
+                <span id="search-error-text"></span>
+            </div>
+        </section>
+
+        <!-- Loading Skeleton / Processing Overlay -->
+        <div id="loader" class="glass-loader-card hide">
+            <div class="loader-pulse-ring">
+                <i data-lucide="radio"></i>
+            </div>
+            <div class="loader-meta">
+                <h4>Resolving Catalog Metadata</h4>
+                <p>Querying music API & audio streams...</p>
+            </div>
+        </div>
+
+        <!-- 3. Three-Column Workspace -->
+        <main class="main-workspace-grid">
+
+            <!-- COLUMN 1: Album / Track Info Card -->
+            <section class="workspace-card glass-card col-album">
+                <div class="card-header">
+                    <span class="section-title">
+                        <i data-lucide="disc"></i> Catalog Asset
+                    </span>
+                </div>
+
+                <div class="artwork-container">
+                    <img id="track-art" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=80" alt="Album Cover" class="album-artwork">
+                    <div class="artwork-gloss-overlay"></div>
+                </div>
+
+                <div class="album-titles">
+                    <h2 id="track-title" class="album-name">Blinding Lights</h2>
+                    <h3 id="track-artist" class="artist-name">The Weeknd</h3>
+                </div>
+
+                <!-- Clean Metadata Grid -->
+                <div class="metadata-grid-spec">
+                    <div class="meta-row">
+                        <span class="meta-label">Album</span>
+                        <span id="meta-album" class="meta-val">After Hours</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Release Year</span>
+                        <span id="meta-year" class="meta-val">2020</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Genre</span>
+                        <span id="meta-genre" class="meta-val">R&B / Soul</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Tracks</span>
+                        <span id="meta-tracks" class="meta-val">1 Track</span>
+                    </div>
+                </div>
+
+                <!-- Tracklist Preview for Albums -->
+                <div id="album-tracks-container" class="album-tracks-preview hide">
+                    <div class="tracklist-header">
+                        <span>Album Tracklist</span>
+                        <span class="track-count-badge" id="album-tracks-count">0 tracks</span>
+                    </div>
+                    <ul id="album-tracks-list" class="tracks-scroll-list">
+                        <!-- Populated dynamically -->
+                    </ul>
+                </div>
             </section>
 
-            <!-- Loading Spinner (Skeleton) -->
-            <div id="loader" class="loader-container hide">
-                <div class="spinner"></div>
-                <p>Retrieving catalog metadata...</p>
-            </div>
+            <!-- COLUMN 2: Download Configuration & Embedded Activity Log -->
+            <section class="workspace-card glass-card col-settings">
+                <div class="card-header">
+                    <span class="section-title">
+                        <i data-lucide="sliders"></i> Download Options
+                    </span>
+                </div>
 
-            <!-- Preview Section -->
-            <section id="preview-section" class="preview-section hide">
-                <div class="preview-layout">
-                    <div class="artwork-wrapper">
-                        <img id="track-art" src="" alt="Album Cover">
-                        <div class="artwork-overlay"></div>
+                <div class="settings-form">
+
+                    <!-- Output Format -->
+                    <div class="form-group-glass">
+                        <label for="download-format">
+                            <i data-lucide="file-audio"></i> Output Format
+                        </label>
+                        <div class="custom-select-wrapper">
+                            <select id="download-format">
+                                <option value="mp3" selected>MP3 Only (320kbps High Quality)</option>
+                                <option value="flac">FLAC Only (Lossless Container)</option>
+                                <option value="both">Both (MP3 + FLAC Parallel)</option>
+                            </select>
+                            <i data-lucide="chevron-down" class="select-chevron"></i>
+                        </div>
                     </div>
-                    
-                    <div class="track-details">
-                        <span id="badge-type" class="badge">Song</span>
-                        <h2 id="track-title">Blinding Lights</h2>
-                        <h3 id="track-artist">The Weeknd</h3>
-                        
-                        <div class="metadata-grid">
-                            <div class="meta-item">
-                                <span class="meta-label">Album</span>
-                                <span id="meta-album" class="meta-value">After Hours</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Release Year</span>
-                                <span id="meta-year" class="meta-value">2020</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Genre</span>
-                                <span id="meta-genre" class="meta-value">R&B/Soul</span>
-                            </div>
-                            <div class="meta-item">
-                                <span class="meta-label">Tracks</span>
-                                <span id="meta-tracks" class="meta-value">1</span>
-                            </div>
+
+                    <!-- Cookie Source Dropdown -->
+                    <div class="form-group-glass">
+                        <label for="cookies-source">
+                            <i data-lucide="cookie"></i> Browser Cookies (Bypasses YouTube Auth)
+                        </label>
+                        <div class="custom-select-wrapper">
+                            <select id="cookies-source">
+                                <option value="none" selected>None (Anonymous Direct Fetch)</option>
+                                <option value="chrome">Google Chrome</option>
+                                <option value="edge">Microsoft Edge</option>
+                                <option value="brave">Brave Browser</option>
+                                <option value="firefox">Mozilla Firefox</option>
+                                <option value="opera">Opera</option>
+                                <option value="safari">Apple Safari</option>
+                            </select>
+                            <i data-lucide="chevron-down" class="select-chevron"></i>
+                        </div>
+                        <p class="form-help-text">
+                            <i data-lucide="info"></i> Close Chromium browsers before starting on Windows.
+                        </p>
+                    </div>
+
+                    <!-- Studio Audio Priority Switch -->
+                    <div class="toggle-switch-card">
+                        <div class="toggle-info">
+                            <span class="toggle-title">Studio Audio Priority</span>
+                            <span class="toggle-desc">Filters out music video scenes and intro dialogue.</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="clean-audio" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <!-- Primary Action Button -->
+                    <button id="btn-download" class="btn-download-primary">
+                        <i data-lucide="download-cloud"></i>
+                        <span>Start Downloader</span>
+                    </button>
+                </div>
+
+                <!-- Embedded Activity Log inside Column 2 -->
+                <div class="activity-terminal-container col-embedded-terminal" id="terminal-container">
+                    <div class="terminal-header-bar" id="terminal-header">
+                        <div class="terminal-title-group">
+                            <i data-lucide="terminal"></i>
+                            <span class="terminal-title">Activity Log</span>
                         </div>
 
-                        <!-- Settings & Action -->
-                        <div class="download-settings">
-                            <div class="select-wrapper">
-                                <label for="download-format">Output Format</label>
-                                <select id="download-format">
-                                    <option value="mp3" selected>(Recommended) MP3 Only (320kbps High Quality)</option>
-                                    <option value="flac">FLAC Only (Lossless Container)</option>
-                                    <option value="both">Both (MP3 + FLAC)</option>
-                                </select>
-                            </div>
-
-                            <div class="select-wrapper">
-                                <label for="cookies-source"><i class="fa-solid fa-cookie-bite"></i> Use Browser Cookies (Fixes YouTube "Sign in" block)</label>
-                                <select id="cookies-source">
-                                    <option value="none">None (Anonymous Search)</option>
-                                    <option value="chrome">Google Chrome</option>
-                                    <option value="edge">Microsoft Edge</option>
-                                    <option value="brave">Brave Browser</option>
-                                    <option value="firefox">Mozilla Firefox</option>
-                                    <option value="opera">Opera</option>
-                                    <option value="safari">Apple Safari</option>
-                                    <option value="vivaldi">Vivaldi</option>
-                                    <option value="whale">Whale Browser</option>
-                                </select>
-                                <p class="help-text"><i class="fa-solid fa-circle-info"></i> <strong>Note:</strong> On Windows, you must close Chromium browsers (Chrome/Brave/Edge/Opera) before starting so the system can read cookies. Firefox does not need to be closed.</p>
-                            </div>
-
-                            <div class="checkbox-wrapper">
-                                <label class="checkbox-container">
-                                    <input type="checkbox" id="clean-audio" checked>
-                                    <span class="checkmark"></span>
-                                    <span><i class="fa-solid fa-music"></i> Prioritize Official Studio Audio (Avoid Music Videos)</span>
-                                </label>
-                                <p class="help-text"><i class="fa-solid fa-circle-info"></i> <strong>Recommended:</strong> Attempts to find and download clean studio tracks from official Topic channels instead of music videos that have movie scenes, talking, or extra sound effects.</p>
-                            </div>
-                            
-                            <button id="btn-download" class="btn btn-download-action">
-                                <i class="fa-solid fa-circle-arrow-down"></i>
-                                <span>Start Downloader</span>
+                        <div class="terminal-controls">
+                            <button class="term-btn" id="btn-clear-terminal" title="Clear Terminal Logs">
+                                <i data-lucide="trash-2"></i>
+                                <span>Clear</span>
+                            </button>
+                            <button class="term-btn" id="btn-copy-terminal" title="Copy Log Output">
+                                <i data-lucide="copy"></i>
+                                <span>Copy</span>
+                            </button>
+                            <button class="term-btn term-toggle-btn" id="btn-toggle-terminal" title="Toggle Terminal Collapse">
+                                <i data-lucide="chevron-down" id="terminal-chevron"></i>
                             </button>
                         </div>
+                    </div>
 
-                        <!-- Track list preview for albums -->
-                        <div id="album-tracks-container" class="album-tracks-container hide">
-                            <h4>Album Tracklist</h4>
-                            <ul id="album-tracks-list">
-                                <!-- Dynamically populated -->
-                            </ul>
+                    <div class="terminal-body" id="terminal-body">
+                        <div class="terminal-content" id="log-terminal">
+                            <div class="log-line info">
+                                <span class="log-time">[SYSTEM]</span> Engine ready. Enter URL to start.
+                            </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Console / Progress Section -->
-            <section id="console-section" class="console-section card hide">
-                <div class="console-header">
-                    <div class="console-title">
-                        <i class="fa-solid fa-terminal"></i>
-                        <span>Downloader Progress Console</span>
-                    </div>
-                    <span id="download-status" class="status-indicator processing">Processing</span>
+            <!-- COLUMN 3: Queue Panel & Step Pipeline -->
+            <section class="workspace-card glass-card col-queue">
+                <div class="card-header">
+                    <span class="section-title">
+                        <i data-lucide="list-ordered"></i> Queue & Pipeline
+                    </span>
+                    <span class="status-pill status-ready" id="queue-status-indicator">Ready</span>
                 </div>
 
-                <!-- Progress Bar -->
-                <div class="progress-container">
-                    <div class="progress-bar-bg">
-                        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
-                    </div>
-                    <div class="progress-text-row">
-                        <span id="progress-text">Preparing download...</span>
-                        <span id="progress-percent">0%</span>
+                <!-- Apple Step Pipeline Tracker -->
+                <div class="pipeline-container">
+                    <h4 class="pipeline-heading">Execution Pipeline</h4>
+
+                    <div class="step-pipeline" id="step-pipeline">
+                        <div class="pipeline-step step-done" data-step="resolve">
+                            <div class="step-icon-node"><i data-lucide="check"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Resolve URL</span>
+                                <span class="step-desc">Parse stream source ID</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-done" data-step="metadata">
+                            <div class="step-icon-node"><i data-lucide="check"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Read Metadata</span>
+                                <span class="step-desc">Fetch ID3 tags & artwork</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-idle" data-step="audio">
+                            <div class="step-icon-node"><i data-lucide="disc"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Find Audio</span>
+                                <span class="step-desc">Locate 256k AAC / Opus</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-idle" data-step="download">
+                            <div class="step-icon-node"><i data-lucide="arrow-down-circle"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Download</span>
+                                <span class="step-desc">Buffer audio streams</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-idle" data-step="convert">
+                            <div class="step-icon-node"><i data-lucide="refresh-cw"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Convert</span>
+                                <span class="step-desc">Encode MP3 / FLAC</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-idle" data-step="tagging">
+                            <div class="step-icon-node"><i data-lucide="tag"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Embed Metadata</span>
+                                <span class="step-desc">Inject cover art & lyrics</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-idle" data-step="verify">
+                            <div class="step-icon-node"><i data-lucide="shield-check"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Verify</span>
+                                <span class="step-desc">Validate container integrity</span>
+                            </div>
+                        </div>
+
+                        <div class="pipeline-step step-idle" data-step="complete">
+                            <div class="step-icon-node"><i data-lucide="check-circle-2"></i></div>
+                            <div class="step-details">
+                                <span class="step-name">Complete</span>
+                                <span class="step-desc">File saved to downloads</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Log Terminal -->
-                <div id="log-terminal" class="log-terminal">
-                    <!-- Stream logs output here -->
+                <!-- Active Queue Item -->
+                <div class="queue-list-section">
+                    <div class="queue-list-header">
+                        <span>Active Items</span>
+                        <span id="queue-item-count">1 Track</span>
+                    </div>
+
+                    <div class="queue-items-container" id="queue-items-container">
+                        <div class="queue-item-card queue-item-active" id="active-queue-card">
+                            <img src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=100&auto=format&fit=crop&q=80" alt="Track" class="queue-thumb" id="queue-thumb">
+                            <div class="queue-info">
+                                <span class="queue-song" id="queue-song-title">Blinding Lights</span>
+                                <span class="queue-artist" id="queue-song-artist">The Weeknd</span>
+                                <div class="queue-progress-bar">
+                                    <div class="queue-progress-fill" id="queue-progress-fill" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            <div class="queue-meta-right">
+                                <span class="queue-status-tag tag-pending" id="queue-item-status">Ready</span>
+                                <span class="queue-time" id="queue-item-time">00:00</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
+
         </main>
 
-        <footer>
-            <div class="quality-warning">
-                <i class="fa-solid fa-circle-info"></i>
-                <span><strong>Quality Notice:</strong> Online music tracks are protected by DRM. This downloader automatically resolves the highest quality matching audio stream on YouTube/YouTube Music (256kbps AAC / 160kbps Opus) and encodes it to high quality MP3 (320kbps) or FLAC containers locally. Artwork and metadata are sourced from their respective official platforms.</span>
+    </div>
+
+    <!-- History Drawer Modal -->
+    <div id="history-modal" class="modal-overlay hide">
+        <div class="modal-glass-card">
+            <div class="modal-header">
+                <h3><i data-lucide="history"></i> Download History</h3>
+                <button class="icon-btn-close" id="btn-close-history"><i data-lucide="x"></i></button>
             </div>
-            <p class="copyright">&copy; 2026 down2listen Project. Open-Source. For educational/backup purposes only.</p>
-        </footer>
+            <div class="modal-body">
+                <ul id="history-list" class="history-items-list">
+                    <li class="empty-history">No past downloads recorded yet.</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-glass-secondary" id="btn-clear-history">Clear History</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hide">
+        <div class="modal-glass-card">
+            <div class="modal-header">
+                <h3><i data-lucide="sliders"></i> System Settings</h3>
+                <button class="icon-btn-close" id="btn-close-settings"><i data-lucide="x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item-row">
+                    <div>
+                        <strong>Default Download Directory</strong>
+                        <p class="form-help-text">Output path relative to application root</p>
+                    </div>
+                    <code class="code-box">/downloads</code>
+                </div>
+                <div class="setting-item-row">
+                    <div>
+                        <strong>Audio Processing Engine</strong>
+                        <p class="form-help-text">FFmpeg + yt-dlp binary stack</p>
+                    </div>
+                    <span class="tech-badge badge-green">Ready</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/index.js"></script>

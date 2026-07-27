@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import re
 import json
@@ -14,8 +15,39 @@ from mutagen.flac import FLAC, Picture
 # Initialize static-ffmpeg to add FFmpeg binaries to system PATH dynamically
 static_ffmpeg.add_paths()
 
+def normalize_smart_chars(text):
+    """Normalize unicode smart punctuation (curly quotes, apostrophes, dashes, etc.) to standard ASCII equivalents."""
+    if not isinstance(text, str):
+        return text
+    replacements = {
+        '\u2019': "'",  # U+2019 Right single quotation mark (e.g. "It's", "I'd")
+        '\u2018': "'",  # U+2018 Left single quotation mark
+        '\u02bb': "'",  # U+02BB Modifier letter turned comma
+        '\u02bc': "'",  # U+02BC Modifier letter apostrophe
+        '\u201a': "'",  # U+201A Single low-9 quotation mark
+        '\u201b': "'",  # U+201B Single high-reversed-9 quotation mark
+        '`': "'",       # Grave accent
+        '´': "'",       # Acute accent
+        '\u201c': '"',  # U+201C Left double quotation mark
+        '\u201d': '"',  # U+201D Right double quotation mark
+        '\u209e': '"',  # U+209E Double low-9 quotation mark
+        '\u2013': '-',  # U+2013 En dash
+        '\u2014': '-',  # U+2014 Em dash
+        '\u2010': '-',  # U+2010 Hyphen
+        '\u2011': '-',  # U+2011 Non-breaking hyphen
+        '\u2026': '...',# U+2026 Horizontal ellipsis
+        '\xa0': ' ',   # Non-breaking space
+        '\u200b': '',   # Zero-width space
+        '\u200e': '',   # LTR mark
+        '\u200f': '',   # RTL mark
+    }
+    for orig, repl in replacements.items():
+        text = text.replace(orig, repl)
+    return text
+
 def sanitize_filename(name):
-    """Remove characters that are invalid in Windows/macOS/Linux filenames."""
+    """Remove characters that are invalid in Windows/macOS/Linux filenames and normalize unicode smart chars."""
+    name = normalize_smart_chars(name)
     return re.sub(r'[\\/*?:"<>|]', "", name).strip()
 
 def parse_url(url):
@@ -92,9 +124,9 @@ def get_apple_page_metadata(url, track_id=None):
         raise ValueError("Could not find page sections in metadata.")
         
     header_item = sections[0].get("items", [{}])[0]
-    album_name = header_item.get("title", "Unknown Album")
+    album_name = normalize_smart_chars(header_item.get("title", "Unknown Album"))
     subtitle_links = header_item.get("subtitleLinks", [])
-    album_artist = subtitle_links[0].get("title", "Unknown Artist") if subtitle_links else "Unknown Artist"
+    album_artist = normalize_smart_chars(subtitle_links[0].get("title", "Unknown Artist") if subtitle_links else "Unknown Artist")
     
     artwork_dict = header_item.get("artwork", {}).get("dictionary", {})
     artwork_url_template = artwork_dict.get("url", "")
@@ -127,8 +159,8 @@ def get_apple_page_metadata(url, track_id=None):
         t_id = item.get("contentDescriptor", {}).get("identifiers", {}).get("storeAdamID") or str(item.get("trackNumber", idx+1))
         
         mapped_tracks.append({
-            'trackName': item.get('title', 'Unknown Track'),
-            'artistName': item.get('artistName', album_artist),
+            'trackName': normalize_smart_chars(item.get('title', 'Unknown Track')),
+            'artistName': normalize_smart_chars(item.get('artistName', album_artist)),
             'albumArtist': album_artist,
             'collectionName': album_name,
             'trackNumber': item.get('trackNumber', idx + 1),
@@ -161,6 +193,24 @@ def get_apple_page_metadata(url, track_id=None):
         'tracks': mapped_tracks
     }
 
+def normalize_metadata(data):
+    """Recursively normalize string fields in metadata structures."""
+    if isinstance(data, dict):
+        new_data = {}
+        for k, v in data.items():
+            if isinstance(v, str) and k != 'artworkUrl100' and not v.startswith('http'):
+                new_data[k] = normalize_smart_chars(v)
+            elif isinstance(v, (dict, list)):
+                new_data[k] = normalize_metadata(v)
+            else:
+                new_data[k] = v
+        return new_data
+    elif isinstance(data, list):
+        return [normalize_metadata(item) for item in data]
+    elif isinstance(data, str):
+        return normalize_smart_chars(data)
+    return data
+
 def get_track_metadata(url_or_id, track_id=None):
     """Fetch track metadata either via Apple Music webpage scraping or iTunes Lookup API."""
     if isinstance(url_or_id, str) and url_or_id.startswith("http"):
@@ -168,7 +218,7 @@ def get_track_metadata(url_or_id, track_id=None):
             match_i = re.search(r'[?&]i=(\d+)', url_or_id)
             if match_i:
                 track_id = match_i.group(1)
-        return get_apple_page_metadata(url_or_id, track_id)
+        res = get_apple_page_metadata(url_or_id, track_id)
     else:
         url = f"https://itunes.apple.com/lookup?id={url_or_id}"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -181,12 +231,13 @@ def get_track_metadata(url_or_id, track_id=None):
         if result.get("wrapperType") != "track" and result.get("kind") != "song":
             raise ValueError(f"ID {url_or_id} does not represent a song.")
         result["albumArtist"] = result.get("collectionArtistName") or result.get("artistName")
-        return result
+        res = result
+    return normalize_metadata(res)
 
 def get_album_metadata(url_or_id):
     """Fetch album metadata either via Apple Music webpage scraping or iTunes Lookup API."""
     if isinstance(url_or_id, str) and url_or_id.startswith("http"):
-        return get_apple_page_metadata(url_or_id)
+        res = get_apple_page_metadata(url_or_id)
     else:
         url = f"https://itunes.apple.com/lookup?id={url_or_id}&entity=song"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -204,10 +255,11 @@ def get_album_metadata(url_or_id):
         for track in tracks:
             track["albumArtist"] = track.get("collectionArtistName") or album_artist
         tracks.sort(key=lambda t: (t.get("discNumber", 1), t.get("trackNumber", 1)))
-        return {
+        res = {
             "album_info": album_info,
             "tracks": tracks
         }
+    return normalize_metadata(res)
 
 def get_spotify_track_metadata(track_id):
     """Fetch Spotify track metadata anonymously via embed page."""
@@ -246,7 +298,7 @@ def get_spotify_track_metadata(track_id):
     if len(parts) >= 3:
         album_name = parts[1]
         
-    return {
+    return normalize_metadata({
         'trackName': entity.get('name', 'Unknown Track'),
         'artistName': artist_name,
         'albumArtist': artist_name,
@@ -259,7 +311,7 @@ def get_spotify_track_metadata(track_id):
         'primaryGenreName': 'Pop',
         'artworkUrl100': artwork_url,
         'duration_ms': entity.get('duration')
-    }
+    })
 
 def get_spotify_album_metadata(album_id):
     """Fetch Spotify album metadata and tracks via embed page."""
@@ -320,10 +372,10 @@ def get_spotify_album_metadata(album_id):
             'duration_ms': t.get('duration')
         })
         
-    return {
+    return normalize_metadata({
         'album_info': album_info,
         'tracks': tracks
-    }
+    })
 
 def get_youtube_track_metadata(video_id):
     """Fetch YouTube video metadata using yt-dlp, and enrich it via iTunes Search API if possible."""
@@ -405,7 +457,7 @@ def get_youtube_track_metadata(video_id):
     except Exception:
         pass # Silently proceed with YouTube metadata if iTunes search fails
         
-    return metadata
+    return normalize_metadata(metadata)
 
 def get_youtube_playlist_metadata(playlist_id):
     """Fetch YouTube playlist metadata using yt-dlp."""
@@ -458,10 +510,10 @@ def get_youtube_playlist_metadata(playlist_id):
             'duration_ms': (entry.get('duration') or 0) * 1000
         })
         
-    return {
+    return normalize_metadata({
         'album_info': album_info,
         'tracks': tracks
-    }
+    })
 
 def download_artwork(artwork_url, size=1000):
     """Download artwork image and return bytes."""
@@ -509,10 +561,10 @@ def tag_mp3(file_path, metadata, artwork_bytes):
         audio.save(file_path, v2_version=3)
         audio = EasyID3(file_path)
         
-    audio['title'] = metadata.get('trackName', '')
-    audio['artist'] = metadata.get('artistName', '')
-    audio['album'] = metadata.get('collectionName', '')
-    audio['albumartist'] = metadata.get('albumArtist') or metadata.get('artistName', '')
+    audio['title'] = normalize_smart_chars(metadata.get('trackName', ''))
+    audio['artist'] = normalize_smart_chars(metadata.get('artistName', ''))
+    audio['album'] = normalize_smart_chars(metadata.get('collectionName', ''))
+    audio['albumartist'] = normalize_smart_chars(metadata.get('albumArtist') or metadata.get('artistName', ''))
     
     if 'trackNumber' in metadata:
         if 'trackCount' in metadata:
@@ -531,7 +583,7 @@ def tag_mp3(file_path, metadata, artwork_bytes):
         audio['date'] = metadata['releaseDate'][:4]
         
     if 'primaryGenreName' in metadata:
-        audio['genre'] = metadata['primaryGenreName']
+        audio['genre'] = normalize_smart_chars(metadata['primaryGenreName'])
         
     audio.save(v2_version=3)
     
@@ -539,7 +591,7 @@ def tag_mp3(file_path, metadata, artwork_bytes):
     if artwork_bytes:
         audio_id3 = ID3(file_path)
         audio_id3.add(APIC(
-            encoding=0,  # Latin-1 (highly compatible for ID3v2.3)
+            encoding=3,  # UTF-8 encoding
             mime='image/jpeg',
             type=3,  # Cover Front
             desc='Cover',
@@ -550,10 +602,10 @@ def tag_mp3(file_path, metadata, artwork_bytes):
 def tag_flac(file_path, metadata, artwork_bytes):
     """Write Vorbis Comments and embed artwork in FLAC file."""
     audio = FLAC(file_path)
-    audio['title'] = metadata.get('trackName', '')
-    audio['artist'] = metadata.get('artistName', '')
-    audio['album'] = metadata.get('collectionName', '')
-    album_artist = metadata.get('albumArtist') or metadata.get('artistName', '')
+    audio['title'] = normalize_smart_chars(metadata.get('trackName', ''))
+    audio['artist'] = normalize_smart_chars(metadata.get('artistName', ''))
+    audio['album'] = normalize_smart_chars(metadata.get('collectionName', ''))
+    album_artist = normalize_smart_chars(metadata.get('albumArtist') or metadata.get('artistName', ''))
     audio['albumartist'] = album_artist
     audio['album_artist'] = album_artist
     

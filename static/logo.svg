@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Liquid Glass Purple Gradient -->
+    <linearGradient id="glass-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9333EA"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+
+    <!-- Gloss Top Highlight -->
+    <linearGradient id="gloss-overlay" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.25"/>
+    </linearGradient>
+
+    <!-- Arrow Gradient -->
+    <linearGradient id="arrow-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E9D5FF"/>
+    </linearGradient>
+
+    <filter id="icon-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- macOS App Squircle Container -->
+  <rect x="16" y="16" width="480" height="480" rx="108" ry="108" fill="url(#glass-grad)" filter="url(#icon-glow)"/>
+  <rect x="16" y="16" width="480" height="480" rx="108" ry="108" fill="url(#gloss-overlay)"/>
+  
+  <!-- Inset Top Edge Glass Border -->
+  <rect x="17" y="17" width="478" height="478" rx="107" ry="107" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-opacity="0.35"/>
+
+  <!-- Headphones Arch Outer -->
+  <path d="M 124 236 A 132 132 0 0 1 388 236" fill="none" stroke="#FFFFFF" stroke-width="36" stroke-linecap="round"/>
+
+  <!-- Headphones Arch Inner Cushion -->
+  <path d="M 136 236 A 120 120 0 0 1 376 236" fill="none" stroke="#E9D5FF" stroke-width="12" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- Left Earcup -->
+  <rect x="108" y="210" width="36" height="150" rx="18" fill="#FFFFFF"/>
+  <rect x="92" y="255" width="22" height="60" rx="11" fill="#E9D5FF"/>
+  <rect x="136" y="225" width="16" height="120" rx="6" fill="#C084FC"/>
+
+  <!-- Right Earcup -->
+  <rect x="368" y="210" width="36" height="150" rx="18" fill="#FFFFFF"/>
+  <rect x="398" y="255" width="22" height="60" rx="11" fill="#E9D5FF"/>
+  <rect x="360" y="225" width="16" height="120" rx="6" fill="#C084FC"/>
+
+  <!-- Center Download Arrow -->
+  <path d="M 228 190 
+           L 284 190 
+           L 284 290 
+           L 320 290 
+           L 256 395 
+           L 192 290 
+           L 228 290 
+           Z" 
+        fill="url(#arrow-grad)"/>
+
+  <!-- Soft Arrow Highlight -->
+  <path d="M 234 196 L 278 196 L 278 296 L 310 296 L 256 385 L 202 296 L 234 296 Z" fill="#FFFFFF" opacity="0.4"/>
+</svg>
